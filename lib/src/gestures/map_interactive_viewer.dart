@@ -452,24 +452,37 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
         pointerSignal,
         (pointerSignal) {
           pointerSignal as PointerScrollEvent;
+          final camera = widget.controller.camera; // Pobierz aktualną kamerę
           final minZoom = _options.minZoom ?? 0.0;
           final maxZoom = _options.maxZoom ?? double.infinity;
-          final newZoom = (_camera.zoom -
-                  pointerSignal.scrollDelta.dy *
-                      _interactionOptions.scrollWheelVelocity)
-              .clamp(minZoom, maxZoom);
+
+          final double newZoom;
+
+          if (_interactionOptions.enableIntegerZoom) {
+            if (pointerSignal.scrollDelta.dy < 0) {
+              newZoom = (camera.zoom + 1).floorToDouble();
+            } else {
+              newZoom = (camera.zoom - 1).ceilToDouble();
+            }
+          } else {
+            newZoom = camera.zoom -
+                pointerSignal.scrollDelta.dy *
+                    _interactionOptions.scrollWheelVelocity;
+          }
+
+          final clampedZoom = newZoom.clamp(minZoom, maxZoom);
+          if (clampedZoom == camera.zoom) {
+            return;
+          }
+
           // Calculate offset of mouse cursor from viewport center
           final newCenter = _camera.focusedZoomCenter(
             pointerSignal.localPosition,
-            newZoom,
+            clampedZoom,
           );
-
-          _closeFlingAnimationController(MapEventSource.scrollWheel);
-          _closeDoubleTapController(MapEventSource.scrollWheel);
-
           widget.controller.moveRaw(
             newCenter,
-            newZoom,
+            clampedZoom,
             hasGesture: true,
             source: MapEventSource.scrollWheel,
           );
@@ -650,10 +663,12 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
               ? (_camera.zoom + 1).floorToDouble()
               : (_camera.zoom - 1).ceilToDouble();
 
-          final clampedZoom = targetZoom.clamp(_options.minZoom ?? 0.0, _options.maxZoom ?? double.infinity);
+          final clampedZoom = targetZoom.clamp(
+              _options.minZoom ?? 0.0, _options.maxZoom ?? double.infinity);
 
-          if(clampedZoom != _camera.zoom) {
-            final newCenter = _camera.focusedZoomCenter(details.localFocalPoint, clampedZoom);
+          if (clampedZoom != _camera.zoom) {
+            final newCenter =
+                _camera.focusedZoomCenter(details.localFocalPoint, clampedZoom);
             _startDoubleTapAnimation(clampedZoom, newCenter);
             _didZoomInThisGesture = true;
           }
