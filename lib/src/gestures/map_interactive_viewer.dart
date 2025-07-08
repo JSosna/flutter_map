@@ -452,7 +452,10 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
         pointerSignal,
         (pointerSignal) {
           pointerSignal as PointerScrollEvent;
-          final camera = widget.controller.camera; // Pobierz aktualną kamerę
+
+          final camera = widget.controller.camera;
+          if (_doubleTapController.isAnimating) return;
+
           final minZoom = _options.minZoom ?? 0.0;
           final maxZoom = _options.maxZoom ?? double.infinity;
 
@@ -471,21 +474,14 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
           }
 
           final clampedZoom = newZoom.clamp(minZoom, maxZoom);
-          if (clampedZoom == camera.zoom) {
-            return;
-          }
+          if (clampedZoom == camera.zoom) return;
 
-          // Calculate offset of mouse cursor from viewport center
           final newCenter = _camera.focusedZoomCenter(
             pointerSignal.localPosition,
             clampedZoom,
           );
-          widget.controller.moveRaw(
-            newCenter,
-            clampedZoom,
-            hasGesture: true,
-            source: MapEventSource.scrollWheel,
-          );
+
+          _startDoubleTapAnimation(clampedZoom, newCenter);
         },
       );
     }
