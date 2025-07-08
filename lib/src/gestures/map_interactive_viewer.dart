@@ -71,6 +71,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
   var _pinchMoveStarted = false;
   var _dragStarted = false;
   var _flingAnimationStarted = false;
+  var _didZoomInThisGesture = false;
 
   /// Helps to reset ScaleUpdateDetails.scale back to 1.0 when a multi finger
   /// gesture wins
@@ -535,6 +536,8 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
     _closeFlingAnimationController(eventSource);
     _closeDoubleTapController(eventSource);
 
+    _didZoomInThisGesture = false;
+
     _gestureWinner = MultiFingerGesture.none;
 
     _mapZoomStart = _camera.zoom;
@@ -641,10 +644,27 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
 
     // Handle pinch zoom.
     if (hasPinchZoom && details.scale > 0.0) {
-      newZoom = _getZoomForScale(
-        _mapZoomStart,
-        details.scale + _scaleCorrector,
-      );
+      if (_interactionOptions.enableIntegerZoom) {
+        if (!_didZoomInThisGesture) {
+          final targetZoom = details.scale > 1.0
+              ? (_camera.zoom + 1).floorToDouble()
+              : (_camera.zoom - 1).ceilToDouble();
+
+          final clampedZoom = targetZoom.clamp(_options.minZoom ?? 0.0, _options.maxZoom ?? double.infinity);
+
+          if(clampedZoom != _camera.zoom) {
+            final newCenter = _camera.focusedZoomCenter(details.localFocalPoint, clampedZoom);
+            _startDoubleTapAnimation(clampedZoom, newCenter);
+            _didZoomInThisGesture = true;
+          }
+        }
+        newZoom = _camera.zoom;
+      } else {
+        newZoom = _getZoomForScale(
+          _mapZoomStart,
+          details.scale + _scaleCorrector,
+        );
+      }
 
       // Handle starting of pinch zoom.
       if (!_pinchZoomStarted && newZoom != _mapZoomStart) {
