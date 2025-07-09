@@ -67,6 +67,8 @@ class InteractionOptions {
   /// with the scroll wheel of a mouse.
   final double scrollWheelVelocity;
 
+  final bool enableIntegerZoom;
+
   /// Calculates the zoom difference to apply to the initial zoom level when a
   /// user is performing a double-tap drag zoom gesture
   ///
@@ -131,6 +133,7 @@ class InteractionOptions {
     this.doubleTapZoomCurve = Curves.fastOutSlowIn,
     this.cursorKeyboardRotationOptions = const CursorKeyboardRotationOptions(),
     this.keyboardOptions = const KeyboardOptions(),
+    this.enableIntegerZoom = false,
   })  : assert(
           rotationThreshold >= 0.0,
           '`rotationThreshold` must be positive',
@@ -171,6 +174,7 @@ class InteractionOptions {
           other.doubleTapDragZoomChangeCalculator &&
       doubleTapZoomDuration == other.doubleTapZoomDuration &&
       doubleTapZoomCurve == other.doubleTapZoomCurve &&
+      enableIntegerZoom == other.enableIntegerZoom &&
       keyboardOptions == other.keyboardOptions;
 
   @override
@@ -189,5 +193,6 @@ class InteractionOptions {
         doubleTapZoomDuration,
         doubleTapZoomCurve,
         keyboardOptions,
+        enableIntegerZoom,
       );
 }

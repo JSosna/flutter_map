@@ -71,6 +71,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
   var _pinchMoveStarted = false;
   var _dragStarted = false;
   var _flingAnimationStarted = false;
+  var _didZoomInThisGesture = false;
 
   /// Helps to reset ScaleUpdateDetails.scale back to 1.0 when a multi finger
   /// gesture wins
@@ -92,6 +93,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
   );
   late Animation<double> _doubleTapZoomAnimation;
   late Animation<LatLng> _doubleTapCenterAnimation;
+  double? _zoomAnimationTarget;
 
   // 'ckr' = cursor/keyboard rotation
   final _ckrTriggered = ValueNotifier(false);
@@ -441,37 +443,47 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
   }
 
   void _onPointerSignal(PointerSignalEvent pointerSignal) {
-    // Handle mouse scroll events if the enableScrollWheel parameter is enabled
     if (pointerSignal is PointerScrollEvent &&
         InteractiveFlag.hasScrollWheelZoom(_interactionOptions.flags) &&
         pointerSignal.scrollDelta.dy != 0) {
-      // Prevent scrolling of parent/child widgets simultaneously. See
-      // [PointerSignalResolver] documentation for more information.
       GestureBinding.instance.pointerSignalResolver.register(
         pointerSignal,
         (pointerSignal) {
           pointerSignal as PointerScrollEvent;
+
+          final camera = widget.controller.camera;
           final minZoom = _options.minZoom ?? 0.0;
           final maxZoom = _options.maxZoom ?? double.infinity;
-          final newZoom = (_camera.zoom -
-                  pointerSignal.scrollDelta.dy *
-                      _interactionOptions.scrollWheelVelocity)
-              .clamp(minZoom, maxZoom);
-          // Calculate offset of mouse cursor from viewport center
+
+          double newTargetZoom;
+
+          final baseZoom = _doubleTapController.isAnimating
+              ? _zoomAnimationTarget!
+              : camera.zoom;
+
+          if (_interactionOptions.enableIntegerZoom) {
+            if (pointerSignal.scrollDelta.dy < 0) {
+              newTargetZoom = (baseZoom + 1).floorToDouble();
+            } else {
+              newTargetZoom = (baseZoom - 1).ceilToDouble();
+            }
+          } else {
+            newTargetZoom = baseZoom -
+                pointerSignal.scrollDelta.dy *
+                    _interactionOptions.scrollWheelVelocity;
+          }
+
+          final clampedNewTargetZoom = newTargetZoom.clamp(minZoom, maxZoom);
+
+          if (clampedNewTargetZoom == _zoomAnimationTarget) return;
+
+          _zoomAnimationTarget = clampedNewTargetZoom;
           final newCenter = _camera.focusedZoomCenter(
             pointerSignal.localPosition,
-            newZoom,
+            clampedNewTargetZoom,
           );
 
-          _closeFlingAnimationController(MapEventSource.scrollWheel);
-          _closeDoubleTapController(MapEventSource.scrollWheel);
-
-          widget.controller.moveRaw(
-            newCenter,
-            newZoom,
-            hasGesture: true,
-            source: MapEventSource.scrollWheel,
-          );
+          _startOrUpdateZoomAnimation(clampedNewTargetZoom, newCenter);
         },
       );
     }
@@ -532,8 +544,12 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
     final eventSource = _dragMode
         ? MapEventSource.dragStart
         : MapEventSource.multiFingerGestureStart;
+    _zoomAnimationTarget = null;
+
     _closeFlingAnimationController(eventSource);
     _closeDoubleTapController(eventSource);
+
+    _didZoomInThisGesture = false;
 
     _gestureWinner = MultiFingerGesture.none;
 
@@ -640,11 +656,30 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
     var newZoom = _camera.zoom;
 
     // Handle pinch zoom.
-    if (hasPinchZoom && details.scale > 0.0) {
-      newZoom = _getZoomForScale(
-        _mapZoomStart,
-        details.scale + _scaleCorrector,
-      );
+    if (hasPinchZoom && details.scale != 1.0) {
+      if (_interactionOptions.enableIntegerZoom) {
+        if (!_didZoomInThisGesture) {
+          final targetZoom = details.scale > 1.0
+              ? (_camera.zoom + 1).floorToDouble()
+              : (_camera.zoom - 1).ceilToDouble();
+
+          final clampedZoom = targetZoom.clamp(
+              _options.minZoom ?? 0.0, _options.maxZoom ?? double.infinity);
+
+          if (clampedZoom != _camera.zoom) {
+            final newCenter =
+                _camera.focusedZoomCenter(details.localFocalPoint, clampedZoom);
+            _startOrUpdateZoomAnimation(clampedZoom, newCenter);
+            _didZoomInThisGesture = true;
+          }
+        }
+        newZoom = _camera.zoom;
+      } else {
+        newZoom = _getZoomForScale(
+          _mapZoomStart,
+          details.scale + _scaleCorrector,
+        );
+      }
 
       // Handle starting of pinch zoom.
       if (!_pinchZoomStarted && newZoom != _mapZoomStart) {
@@ -763,6 +798,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
 
   void _handleScaleEnd(ScaleEndDetails details) {
     _resetDoubleTapHold();
+    _didZoomInThisGesture = false;
 
     final eventSource =
         _dragMode ? MapEventSource.dragEnd : MapEventSource.multiFingerEnd;
@@ -866,18 +902,24 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
         tapPosition.relative!,
         newZoom,
       );
-      _startDoubleTapAnimation(newZoom, newCenter);
+      _startOrUpdateZoomAnimation(newZoom, newCenter);
     }
   }
 
-  void _startDoubleTapAnimation(double newZoom, LatLng newCenter) {
-    _doubleTapZoomAnimation = Tween<double>(begin: _camera.zoom, end: newZoom)
+  void _startOrUpdateZoomAnimation(double newZoom, LatLng newCenter) {
+    final beginZoom = _camera.zoom;
+    final beginCenter = _camera.center;
+
+    _doubleTapController.stop();
+
+    _doubleTapZoomAnimation = Tween<double>(begin: beginZoom, end: newZoom)
         .chain(CurveTween(curve: _interactionOptions.doubleTapZoomCurve))
         .animate(_doubleTapController);
-    _doubleTapCenterAnimation =
-        LatLngTween(begin: _camera.center, end: newCenter)
-            .chain(CurveTween(curve: _interactionOptions.doubleTapZoomCurve))
-            .animate(_doubleTapController);
+
+    _doubleTapCenterAnimation = LatLngTween(begin: beginCenter, end: newCenter)
+        .chain(CurveTween(curve: _interactionOptions.doubleTapZoomCurve))
+        .animate(_doubleTapController);
+
     _doubleTapController.forward(from: 0);
   }
 
@@ -888,6 +930,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
       );
       _startListeningForAnimationInterruptions();
     } else if (status == AnimationStatus.completed) {
+      _zoomAnimationTarget = null;
       _stopListeningForAnimationInterruptions();
 
       widget.controller.doubleTapZoomEnded(
