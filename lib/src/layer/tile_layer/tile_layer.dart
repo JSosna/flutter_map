@@ -678,18 +678,9 @@ See:
       _loadTiles(visibleTileRange, pruneAfterLoad: event.prune);
     }
 
-    if (event.prune) {
-      _tileImageManager.evictAndPrune(
-        visibleRange: visibleTileRange,
-        pruneBuffer: widget.panBuffer + widget.keepBuffer,
-        evictStrategy: widget.evictErrorTileStrategy,
-      );
-      if (widget.pruneOnZoomChange) _lastPrunedZoom = tileZoom;
-    }
-
     if (widget.pruneOnZoomChange &&
-           _lastPrunedZoom != null &&
-           _lastPrunedZoom != tileZoom) {
+        _lastPrunedZoom != null &&
+        _lastPrunedZoom != tileZoom) {
       _tileImageManager.evictAndPrune(
         visibleRange: visibleTileRange,
         pruneBuffer: widget.panBuffer + widget.keepBuffer,
@@ -697,6 +688,15 @@ See:
       );
       _lastPrunedZoom = tileZoom;
       setState(() {});
+    }
+
+    if (event.prune) {
+      _tileImageManager.evictAndPrune(
+        visibleRange: visibleTileRange,
+        pruneBuffer: widget.panBuffer + widget.keepBuffer,
+        evictStrategy: widget.evictErrorTileStrategy,
+      );
+      if (widget.pruneOnZoomChange) _lastPrunedZoom = tileZoom;
     }
   }
 
