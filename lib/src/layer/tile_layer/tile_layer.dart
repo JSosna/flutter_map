@@ -229,6 +229,8 @@ class TileLayer extends StatefulWidget {
   /// the [key].
   final TileUpdateTransformer tileUpdateTransformer;
 
+  final bool pruneOnZoomChange;
+
   /// Create a new [TileLayer] for the [FlutterMap] widget.
   TileLayer({
     super.key,
@@ -264,6 +266,7 @@ class TileLayer extends StatefulWidget {
     this.tileBounds,
     TileUpdateTransformer? tileUpdateTransformer,
     String userAgentPackageName = 'unknown',
+    this.pruneOnZoomChange = false,
   })  : assert(
           tileDisplay.when(
             instantaneous: (_) => true,
@@ -407,6 +410,8 @@ See:
   Timer? _pruneLater;
 
   StreamSubscription<void>? _resetSub;
+
+  int? _lastPrunedZoom;
 
   // REMOVE once `tileSize` is removed, and replace references with
   // `widget.tileDimension`
@@ -679,6 +684,19 @@ See:
         pruneBuffer: widget.panBuffer + widget.keepBuffer,
         evictStrategy: widget.evictErrorTileStrategy,
       );
+      if (widget.pruneOnZoomChange) _lastPrunedZoom = tileZoom;
+    }
+
+    if (widget.pruneOnZoomChange &&
+           _lastPrunedZoom != null &&
+           _lastPrunedZoom != tileZoom) {
+      _tileImageManager.evictAndPrune(
+        visibleRange: visibleTileRange,
+        pruneBuffer: widget.panBuffer + widget.keepBuffer,
+        evictStrategy: widget.evictErrorTileStrategy,
+      );
+      _lastPrunedZoom = tileZoom;
+      setState(() {});
     }
   }
 
