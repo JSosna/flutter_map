@@ -19,7 +19,9 @@ import 'package:http/retry.dart';
 import 'package:logger/logger.dart';
 
 part 'retina_mode.dart';
+
 part 'tile_error_evict_callback.dart';
+
 part 'wms_tile_layer_options.dart';
 
 /// Describes the needed properties to create a tile-based layer. A tile is an
@@ -348,24 +350,28 @@ class TileLayer extends StatefulWidget {
 
 class _TileLayerState extends State<TileLayer> with TickerProviderStateMixin {
   static const _openStreetMapUrls = {'tile.openstreetmap.org', 'tile.osm.org'};
+
   bool get _isOpenStreetMapUrl =>
       widget.urlTemplate != null &&
       _openStreetMapUrls.any(widget.urlTemplate!.contains);
 
   static const _unblockOSMEnvVar =
       String.fromEnvironment('flutter.flutter_map.unblockOSM');
+
   static bool get _shouldUnblockOSM => const ListEquality<int>()
       .equals(_unblockOSMEnvVar.codeUnits, osmUnblockingString);
 
   late final hasSetGoodUserAgent =
       widget.tileProvider.headers['User-Agent'] != 'flutter_map (unknown)';
-  late final _blockOpenStreetMapUrl =
-      false /*&&
+  late final _blockOpenStreetMapUrl = false
+
+      /*&&
       _isOpenStreetMapUrl &&
       !hasSetGoodUserAgent &&
       !kDebugMode &&
       !_shouldUnblockOSM*/
       ;
+
   void _warnOpenStreetMapUrl() {
     if (_isOpenStreetMapUrl && kDebugMode && !_shouldUnblockOSM) {
       final uaWarning = hasSetGoodUserAgent
@@ -674,20 +680,18 @@ See:
       viewingZoom: event.zoom,
     );
 
-    if (event.load && !_outsideZoomLimits(tileZoom)) {
-      _loadTiles(visibleTileRange, pruneAfterLoad: event.prune);
-    }
-
-    if (widget.pruneOnZoomChange &&
-        _lastPrunedZoom != null &&
-        _lastPrunedZoom != tileZoom) {
+    if (widget.pruneOnZoomChange && _lastPrunedZoom != tileZoom) {
       _tileImageManager.evictAndPrune(
         visibleRange: visibleTileRange,
-        pruneBuffer: widget.panBuffer + widget.keepBuffer,
+        pruneBuffer: 0,
         evictStrategy: widget.evictErrorTileStrategy,
       );
       _lastPrunedZoom = tileZoom;
-      setState(() {});
+      if (mounted) setState(() {});
+    }
+
+    if (event.load && !_outsideZoomLimits(tileZoom)) {
+      _loadTiles(visibleTileRange, pruneAfterLoad: event.prune);
     }
 
     if (event.prune) {
@@ -696,7 +700,8 @@ See:
         pruneBuffer: widget.panBuffer + widget.keepBuffer,
         evictStrategy: widget.evictErrorTileStrategy,
       );
-      if (widget.pruneOnZoomChange) _lastPrunedZoom = tileZoom;
+
+      if (!widget.pruneOnZoomChange) _lastPrunedZoom = tileZoom;
     }
   }
 
