@@ -478,14 +478,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
           final clampedNewTargetZoom = newTargetZoom.clamp(minZoom, maxZoom);
 
           if (clampedNewTargetZoom == _zoomAnimationTarget) return;
-
-          // Compute the new center. When an animation is already in
-          // progress we must base the calculation on the animation's
-          // target state (target zoom & target center) instead of the
-          // current intermediate camera state.  Using the intermediate
-          // state causes the center to drift ("map escaping to corners")
-          // because each interrupted animation starts its center
-          // calculation from a partially-animated position.
+          
           final LatLng newCenter;
           if (isAnimating && _centerAnimationTarget != null) {
             final cursorOffset = (pointerSignal.localPosition -
