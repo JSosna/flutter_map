@@ -94,6 +94,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
   late Animation<double> _doubleTapZoomAnimation;
   late Animation<LatLng> _doubleTapCenterAnimation;
   double? _zoomAnimationTarget;
+  LatLng? _centerAnimationTarget;
 
   // 'ckr' = cursor/keyboard rotation
   final _ckrTriggered = ValueNotifier(false);
@@ -457,7 +458,8 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
 
           double newTargetZoom;
 
-          final baseZoom = _doubleTapController.isAnimating
+          final isAnimating = _doubleTapController.isAnimating;
+          final baseZoom = isAnimating
               ? _zoomAnimationTarget!
               : camera.zoom;
 
@@ -477,12 +479,34 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
 
           if (clampedNewTargetZoom == _zoomAnimationTarget) return;
 
-          _zoomAnimationTarget = clampedNewTargetZoom;
-          final newCenter = _camera.focusedZoomCenter(
-            pointerSignal.localPosition,
-            clampedNewTargetZoom,
-          );
+          // Compute the new center. When an animation is already in
+          // progress we must base the calculation on the animation's
+          // target state (target zoom & target center) instead of the
+          // current intermediate camera state.  Using the intermediate
+          // state causes the center to drift ("map escaping to corners")
+          // because each interrupted animation starts its center
+          // calculation from a partially-animated position.
+          final LatLng newCenter;
+          if (isAnimating && _centerAnimationTarget != null) {
+            final cursorOffset = (pointerSignal.localPosition -
+                    _camera.nonRotatedSize.center(Offset.zero))
+                .rotate(_camera.rotationRad);
+            final scale =
+                _camera.getZoomScale(clampedNewTargetZoom, baseZoom);
+            final newOffset = cursorOffset * (1.0 - 1.0 / scale);
+            final mapCenter =
+                _camera.projectAtZoom(_centerAnimationTarget!, baseZoom);
+            newCenter =
+                _camera.unprojectAtZoom(mapCenter + newOffset, baseZoom);
+          } else {
+            newCenter = _camera.focusedZoomCenter(
+              pointerSignal.localPosition,
+              clampedNewTargetZoom,
+            );
+          }
 
+          _zoomAnimationTarget = clampedNewTargetZoom;
+          _centerAnimationTarget = newCenter;
           _startOrUpdateZoomAnimation(clampedNewTargetZoom, newCenter);
         },
       );
@@ -931,6 +955,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
       _startListeningForAnimationInterruptions();
     } else if (status == AnimationStatus.completed) {
       _zoomAnimationTarget = null;
+      _centerAnimationTarget = null;
       _stopListeningForAnimationInterruptions();
 
       widget.controller.doubleTapZoomEnded(
