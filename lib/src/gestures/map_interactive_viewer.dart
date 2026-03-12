@@ -459,9 +459,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
           double newTargetZoom;
 
           final isAnimating = _doubleTapController.isAnimating;
-          final baseZoom = isAnimating
-              ? _zoomAnimationTarget!
-              : camera.zoom;
+          final baseZoom = isAnimating ? _zoomAnimationTarget! : camera.zoom;
 
           if (_interactionOptions.enableIntegerZoom) {
             if (pointerSignal.scrollDelta.dy < 0) {
@@ -478,28 +476,19 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
           final clampedNewTargetZoom = newTargetZoom.clamp(minZoom, maxZoom);
 
           if (clampedNewTargetZoom == _zoomAnimationTarget) return;
-          
-          final LatLng newCenter;
-          if (isAnimating && _centerAnimationTarget != null) {
-            final cursorOffset = (pointerSignal.localPosition -
-                    _camera.nonRotatedSize.center(Offset.zero))
-                .rotate(_camera.rotationRad);
-            final scale =
-                _camera.getZoomScale(clampedNewTargetZoom, baseZoom);
-            final newOffset = cursorOffset * (1.0 - 1.0 / scale);
-            final mapCenter =
-                _camera.projectAtZoom(_centerAnimationTarget!, baseZoom);
-            newCenter =
-                _camera.unprojectAtZoom(mapCenter + newOffset, baseZoom);
-          } else {
-            newCenter = _camera.focusedZoomCenter(
-              pointerSignal.localPosition,
-              clampedNewTargetZoom,
-            );
-          }
 
-          _zoomAnimationTarget = clampedNewTargetZoom;
-          _centerAnimationTarget = newCenter;
+          final newCenter = isAnimating && _centerAnimationTarget != null
+              ? _camera.focusedZoomCenterFromReference(
+                  pointerSignal.localPosition,
+                  clampedNewTargetZoom,
+                  _zoomAnimationTarget!,
+                  _centerAnimationTarget!,
+                )
+              : _camera.focusedZoomCenter(
+                  pointerSignal.localPosition,
+                  clampedNewTargetZoom,
+                );
+
           _startOrUpdateZoomAnimation(clampedNewTargetZoom, newCenter);
         },
       );
@@ -562,6 +551,7 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
         ? MapEventSource.dragStart
         : MapEventSource.multiFingerGestureStart;
     _zoomAnimationTarget = null;
+    _centerAnimationTarget = null;
 
     _closeFlingAnimationController(eventSource);
     _closeDoubleTapController(eventSource);
@@ -928,6 +918,9 @@ class MapInteractiveViewerState extends State<MapInteractiveViewer>
     final beginCenter = _camera.center;
 
     _doubleTapController.stop();
+
+    _zoomAnimationTarget = newZoom;
+    _centerAnimationTarget = newCenter;
 
     _doubleTapZoomAnimation = Tween<double>(begin: beginZoom, end: newZoom)
         .chain(CurveTween(curve: _interactionOptions.doubleTapZoomCurve))
