@@ -397,6 +397,23 @@ class MapCamera {
     return newCenter;
   }
 
+  /// Like [focusedZoomCenter] but computes from an explicit reference state
+  /// ([refCenter], [refZoom]) instead of the current camera state.
+  LatLng focusedZoomCenterFromReference(
+    Offset cursorPos,
+    double targetZoom,
+    double refZoom,
+    LatLng refCenter,
+  ) {
+    final offset =
+        (cursorPos - nonRotatedSize.center(Offset.zero)).rotate(rotationRad);
+    final scale = getZoomScale(targetZoom, refZoom);
+    final newOffset = offset * (1.0 - 1.0 / scale);
+    final mapCenter = projectAtZoom(refCenter, refZoom);
+    final newCenter = unprojectAtZoom(mapCenter + newOffset, refZoom);
+    return newCenter;
+  }
+
   @override
   int get hashCode => Object.hash(
       crs, minZoom, maxZoom, center, zoom, rotation, nonRotatedSize);
